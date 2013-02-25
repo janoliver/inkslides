@@ -31,6 +31,7 @@ This script has the following dependencies:
 
   * inkscape
   * Python 3
+  * python-lxml
   * PyPDF2      [Github](https://github.com/janoliver/PyPDF2)
 
 ## Acknowledgements
