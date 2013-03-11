@@ -1,4 +1,4 @@
-# Inkscapeslide2 ![](https://stats.oelerich.org/piwik.php?idsite=12&amp;rec=1)
+# Inkscapeslide2
 
 This script generates a PDF presentation out of a single inkscape
 document. 
