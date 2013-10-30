@@ -396,10 +396,10 @@ if __name__ == '__main__':
 
     # command line args
     parser = argparse.ArgumentParser(description='Inkscapeslide.')
-    parser.add_argument('-k', '--keep', action='store_true',
-                        help='keep the temporary files to speed up compilation')
+    parser.add_argument('-t', '--temp', action='store_true',
+        help='don\'t keep the temporary files to speed up compilation')
     parser.add_argument('file', metavar='svg-file', type=str,
-                        help='The svg file to process')
+        help='The svg file to process')
     args = parser.parse_args()
 
     i = InkscapeSlide()

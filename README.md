@@ -25,6 +25,10 @@ Then
     > chmod +x inkscapeslide.py
     > ./inkscapeslide.py presentation.svg
 
+If you pass the parameter `-t, --temp`, then no temporary files are
+kept by inkscapeslide. This, however, slows down the compilation,
+because it recompiles all the slides!
+
 ## Dependencies
 
 This script has the following dependencies:
