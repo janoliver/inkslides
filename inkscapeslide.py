@@ -23,7 +23,7 @@ This script has the following dependencies:
   * inkscape
   * Python 3
   * python-lxml
-  * PyPDF2      [Github](https://github.com/janoliver/PyPDF2)
+  * PyPDF2
 
 The idea and many concepts of this script are taken from 
 [inkscapeslide](https://github.com/abourget/inkscapeslide).
@@ -38,6 +38,9 @@ import PyPDF2
 import tempfile
 import argparse
 import os
+import shutil
+import hashlib
+
 
 class InkscapeSlide(object):
     """
@@ -50,51 +53,75 @@ class InkscapeSlide(object):
     The class generates a "slides.pdf" in the same directory. 
     Depending on the number of slides, this may take a while.
     """
-
-    # Input and output filenames
-    f_input    = None  
-    f_output   = None
-
-    # the lxml root document 
-    doc        = None
-
-    # a list containing the description of all the slides and contents
-    content    = None
-
-    # temp folder to use
-    tmp_folder = None
-
-    # the XML namespaces we need.
-    nsmap      = {
-        'svg':      'http://www.w3.org/2000/svg',
-        'inkscape': 'http://www.inkscape.org/namespaces/inkscape'
+    nsmap = {
+        'svg': 'http://www.w3.org/2000/svg',
+        'inkscape': 'http://www.inkscape.org/namespaces/inkscape',
+        'sodipodi': 'http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd'
     }
 
-    def run(self, file):
+    def __init__(self):
+
+        # Input and output filenames
+        self.f_input = None
+        self.f_output = None
+
+        # the lxml root document and some containers
+        self.doc = None
+        self.svg_files = None
+        self.pdf_files = None
+
+        # a list containing the description of all the slides and contents
+        self.content = None
+
+        # temp folder to use
+        self.tmp_folder = None
+
+    def run(self, file, keep=False):
         """
         Carry out the parsing, creation of PDF files and so on.
         Main function. the only parameter is the input filename of the
         SVG slides.
         """
 
-        self.f_input  = file
+        self.f_input = file
         self.f_output = "{}.pdf".format(os.path.splitext(file)[0])
 
-        with tempfile.TemporaryDirectory() as self.tmp_folder:
+        self.setup_temp_folder(keep)
 
-            print("Parsing {} ...".format(self.f_input))
-            self.parse()
+        print("Parsing {} ...".format(self.f_input))
+        self.parse()
 
-            print("Creating SVG slides ...")
-            svg_files = self.create_slides_svg()
+        print("Creating SVG slides ...")
+        if self.create_slides_svg():
+            print("PDF should be up to date. Quitting ...")
+            return
 
-            print("Creating PDF slides ...")
-            pdf_files = self.create_slides_pdf(svg_files)
+        print("Creating PDF slides ...")
+        self.create_slides_pdf()
 
-            print("Merging PDF slides ...")
-            self.join_slides_pdf(pdf_files)
+        print("Merging PDF slides ...")
+        self.join_slides_pdf()
 
-            print("Done creating {}".format(self.f_output))
+        # remove the temp folder, if the keep option was not set
+        self.clear_temp_folder(keep)
+
+        print("Done creating {}.".format(self.f_output))
+
+    def setup_temp_folder(self, keep):
+        # create (or detect) the temporary directory. If the keep option was
+        # set, we use ./.inkscapeslide2 as temp folder. if it exists, we reuse
+        # stuff from there. this speeds up everything by a lot. Otherwise,
+        # create a temp folder in /tmp
+        if keep:
+            self.tmp_folder = './.inkscapeslide2'
+            if not os.path.exists(self.tmp_folder):
+                os.makedirs(self.tmp_folder)
+        else:
+            self.tmp_folder = tempfile.mkdtemp()
+
+    def clear_temp_folder(self, keep):
+        if not keep:
+            shutil.rmtree(self.tmp_folder)
 
     def parse(self):
         """
@@ -104,7 +131,10 @@ class InkscapeSlide(object):
         parser = xml.XMLParser(ns_clean=True)
         self.doc = xml.parse(self.f_input, parser)
 
+        # find the content descriptor, i.e., which slides to include when + how
         self.content = self.get_content_description()
+
+        # set all elements in the pdf to hidden
         self.hide_all(self.doc)
 
     def create_slides_svg(self):
@@ -114,38 +144,67 @@ class InkscapeSlide(object):
         to PDF by inkscape.
         """
 
-        svg_files = list()
+        only_cached = True
+        self.svg_files = list()
 
         for num, slide in enumerate(self.content):
 
+            svg_path = '{1}/slide-{0}.svg'.format(num, self.tmp_folder)
+
             # we copy the document instance and work on that copy
-            tmp_doc    = copy.deepcopy(self.doc)
+            tmp_doc = copy.deepcopy(self.doc)
             tmp_layers = self.get_layers(tmp_doc)
 
             # set the slide layers to visible and apply opacity
             for layer in slide:
-                if len(layer) == 1: 
+                if len(layer) == 1:
                     layer.append('1.0')
 
                 self.show_layer(tmp_layers[layer[0]], layer[1])
 
-            # select the hidden elements and delete them
+            # add the hidden elements to the to-delete list
             to_be_deleted = tmp_doc.xpath(
-                  '/*/svg:g[@inkscape:groupmode="layer"][contains(\
-                  @style, "display:none")]', 
-                  namespaces=self.nsmap
+                '/*/svg:g[@inkscape:groupmode="layer"][contains(\
+                @style, "display:none")]',
+                namespaces=self.nsmap
             )
-            
+
+            # add the sodipodi:namedview element, which is just inkscape
+            # related stuff
+            to_be_deleted.append(
+                tmp_doc.xpath('//sodipodi:namedview', namespaces=self.nsmap
+                )[0])
+
+            # delete them
             for layer in to_be_deleted:
                 layer.getparent().remove(layer)
 
-            svg_path = '{1}/slide{0}.svg'.format(num, self.tmp_folder)
+            # calculate the sha256 hash of the current svg file, write svg
+            # to file
+            # and recalculate the hash
+            cached = os.path.exists(svg_path)
+            if cached:
+                old_hash = hashlib.sha256(open(svg_path, 'rb').read()).digest()
+
             tmp_doc.write(svg_path)
-            svg_files.append(svg_path)
 
-        return svg_files
+            if cached:
+                new_hash = hashlib.sha256(open(svg_path, 'rb').read()).digest()
 
-    def create_slides_pdf(self, svg_files):
+                # if the hashes are equal AND the corresponding pdf file exists,
+                # we can use the cached version and don't have to go through
+                # inkscape again. yay!
+                cached = old_hash == new_hash and os.path.exists(
+                    self.pdf_from_svg(svg_path))
+
+            self.svg_files.append((svg_path, cached))
+
+            if not cached:
+                only_cached = False
+
+        return only_cached
+
+    def create_slides_pdf(self):
         """
         Generate PDF files out of the single svg files. These are
         later merged to the final presentation pdf. We re-use
@@ -153,55 +212,73 @@ class InkscapeSlide(object):
         """
 
         # this is our inkscape worker
-        ink = subprocess.Popen(['inkscape', '--shell'], 
-                           stdin=subprocess.PIPE, 
-                           stdout=subprocess.PIPE, 
-                           stderr=subprocess.STDOUT)
+        ink = subprocess.Popen(['inkscape', '--shell'],
+                               stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT)
 
-        pdf_files = list()
-        
+        self.pdf_files = list()
+
         # main working loop of the inkscape process
         # we need to wait for ">" to see whether inkscape is ready.
         # The variable ready keeps track of that.
         ready = False
+        counter = 0
+        all = len(self.svg_files)
         while True:
             if ready:
-                if not len(svg_files):
+                if not len(self.svg_files):
                     ink.kill()
                     break
 
-                # take the first svg file and convert it to pdf
-                svg_file = svg_files.pop(0)
-                pdf_files.append("{}.pdf".format(svg_file))
-                command = '-A {0}.pdf {0}\n'.format(
-                    svg_file, self.tmp_folder
-                )
-                ink.stdin.write(bytes(command, 'utf-8'))
+                svg_file, cached = self.svg_files.pop(0)
+                pdf_file = self.pdf_from_svg(svg_file)
 
-                ready = False
+                # calculate percent of advance
+                counter += 1
+                percent = round(counter / all * 100.)
+
+                self.pdf_files.append(pdf_file)
+
+                # if no cached version, create new pdf by inkscape
+                # else skip this slide
+                if not cached:
+                    command = '-A {1} {0}\n'.format(svg_file, pdf_file)
+                    ink.stdin.write(bytes(command, 'utf_8'))
+                    ink.stdin.flush()
+
+                    print("  Converted {0} ({1:d}%)".format(
+                        pdf_file, percent
+                    ))
+
+                    ready = False
+
+                else:
+                    print("  Skipping {0} ({1:d}%)".format(
+                        pdf_file, percent
+                    ))
+
             else:
                 if ink.stdout.read(1) == b'>':
                     ready = True
 
-        return pdf_files
-        
-    def join_slides_pdf(self, pdf_files):
+    def join_slides_pdf(self):
         """
         This function uses PyPDF2 to join the single PDF slides.
         """
 
         output = PyPDF2.PdfFileWriter()
         streams = list()
-        for slide in pdf_files:
+        for slide in self.pdf_files:
             stream = open(slide, "rb")
             pypdf_file = PyPDF2.PdfFileReader(stream)
             output.addPage(pypdf_file.getPage(0))
             streams.append(stream)
-        
+
         with open(self.f_output, "wb") as out_file:
             output.write(out_file)
-            for stream in streams: 
-                stream.close
+            for stream in streams:
+                stream.close()
 
     def get_content_description(self):
         """
@@ -212,8 +289,8 @@ class InkscapeSlide(object):
 
         content_lines = self.doc.xpath(
             '//svg:g[@inkscape:groupmode="layer"][\
-            @inkscape:label="content"]/svg:text/svg:tspan[text()]', 
-                  namespaces=self.nsmap
+            @inkscape:label="content"]/svg:text/svg:tspan[text()]',
+            namespaces=self.nsmap
         )
 
         layers = list()
@@ -221,14 +298,14 @@ class InkscapeSlide(object):
             cache = list()
 
             # if the line starts with a +, copy the last slide first
-            if x.startswith('+'): 
+            if x.startswith('+'):
                 cache = layers[-1].copy()
                 x = x[1:]
 
             # this is a bit cryptic. It decodes each slide and the 
             # corresponding opacity and writes in into the list.
-            cache.extend([[d.strip() for d in c.split('*')] 
-                    for c in x.split(',')])
+            cache.extend([[d.strip() for d in c.split('*')]
+                          for c in x.split(',')])
 
             layers.append(cache)
 
@@ -244,7 +321,7 @@ class InkscapeSlide(object):
         ret = dict()
 
         layers = doc.xpath(
-            '//svg:g[@inkscape:groupmode="layer"]', 
+            '//svg:g[@inkscape:groupmode="layer"]',
             namespaces=self.nsmap
         )
 
@@ -282,7 +359,7 @@ class InkscapeSlide(object):
         Get an attribute value of an lxml element "el"
         """
 
-        return el.attrib.get(self.ns_join(attr,ns), False)
+        return el.attrib.get(self.ns_join(attr, ns), False)
 
     def get_styles(self, el):
         """
@@ -290,7 +367,7 @@ class InkscapeSlide(object):
         """
 
         items = self.get_attr(el, 'style', 'svg')
-        if not items: 
+        if not items:
             return dict()
         return dict(item.split(':') for item in items.split(';'))
 
@@ -299,7 +376,7 @@ class InkscapeSlide(object):
         Set the style="" attribute from a dict.
         """
 
-        s = ";".join(["{}:{}".format(k,v) for k,v in styles.items()])
+        s = ";".join(sorted(["{}:{}".format(k, v) for k, v in styles.items()]))
         el.attrib['style'] = s
 
     def ns_join(self, tag, namespace=None):
@@ -310,14 +387,20 @@ class InkscapeSlide(object):
 
         return '{%s}%s' % (self.nsmap[namespace], tag)
 
+    def pdf_from_svg(self, svg_file_name):
+        return ".".join(svg_file_name.split('.')[:-1]) + '.pdf'
+
+
 if __name__ == '__main__':
     # when the script is called directly...
-     
+
     # command line args
     parser = argparse.ArgumentParser(description='Inkscapeslide.')
+    parser.add_argument('-k', '--keep', action='store_true',
+                        help='keep the temporary files to speed up compilation')
     parser.add_argument('file', metavar='svg-file', type=str,
                         help='The svg file to process')
     args = parser.parse_args()
 
     i = InkscapeSlide()
-    i.run(file=args.file)
+    i.run(file=args.file, keep=args.keep)
