@@ -43,6 +43,3 @@ This script has the following dependencies:
 The idea and many concepts of this script are taken from 
 [inkscapeslide](https://github.com/abourget/inkscapeslide).
 
-## Copyright
-
-Copyright 2013, Jan Oliver Oelerich <janoliver@oelerich.org>
