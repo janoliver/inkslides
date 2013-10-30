@@ -76,7 +76,7 @@ class InkscapeSlide(object):
         # temp folder to use
         self.tmp_folder = None
 
-    def run(self, file, keep=False):
+    def run(self, file, temp=True):
         """
         Carry out the parsing, creation of PDF files and so on.
         Main function. the only parameter is the input filename of the
@@ -86,7 +86,7 @@ class InkscapeSlide(object):
         self.f_input = file
         self.f_output = "{}.pdf".format(os.path.splitext(file)[0])
 
-        self.setup_temp_folder(keep)
+        self.setup_temp_folder(temp)
 
         print("Parsing {} ...".format(self.f_input))
         self.parse()
@@ -103,7 +103,7 @@ class InkscapeSlide(object):
         self.join_slides_pdf()
 
         # remove the temp folder, if the keep option was not set
-        self.clear_temp_folder(keep)
+        self.clear_temp_folder(temp)
 
         print("Done creating {}.".format(self.f_output))
 
@@ -403,4 +403,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     i = InkscapeSlide()
-    i.run(file=args.file, keep=args.keep)
+    i.run(file=args.file, temp=args.temp)
