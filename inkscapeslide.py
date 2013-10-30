@@ -107,20 +107,20 @@ class InkscapeSlide(object):
 
         print("Done creating {}.".format(self.f_output))
 
-    def setup_temp_folder(self, keep):
+    def setup_temp_folder(self, temp):
         # create (or detect) the temporary directory. If the keep option was
         # set, we use ./.inkscapeslide2 as temp folder. if it exists, we reuse
         # stuff from there. this speeds up everything by a lot. Otherwise,
         # create a temp folder in /tmp
-        if keep:
+        if not temp:
             self.tmp_folder = './.inkscapeslide2'
             if not os.path.exists(self.tmp_folder):
                 os.makedirs(self.tmp_folder)
         else:
             self.tmp_folder = tempfile.mkdtemp()
 
-    def clear_temp_folder(self, keep):
-        if not keep:
+    def clear_temp_folder(self, temp):
+        if temp:
             shutil.rmtree(self.tmp_folder)
 
     def parse(self):
