@@ -3,6 +3,25 @@
 This script generates a PDF presentation out of a single inkscape
 document. 
 
+## Installation
+
+Put the file `inkscapeslide.py` somewhere in your path (or into the 
+directory your SVG presentation resides in and make it executable. 
+(Although you can execute it by running `python inkscapeslide.py` as
+well)
+
+Alternatively, on Arch Linux, you can install the AUR package
+[inkscapeslide2-git](https://aur.archlinux.org/packages/inkscapeslide2-git/).
+
+## Dependencies
+
+This script has the following dependencies:
+
+  * inkscape
+  * Python 3
+  * python-lxml
+  * PyPDF2      [Github](https://github.com/janoliver/PyPDF2)
+
 ## Usage
 
 In the inkscape document, there must be a layer named 
@@ -29,20 +48,8 @@ If you pass the parameter `-t, --temp`, then no temporary files are
 kept by inkscapeslide. This, however, slows down the compilation,
 because it recompiles all the slides!
 
-## Dependencies
-
-This script has the following dependencies:
-
-  * inkscape
-  * Python 3
-  * python-lxml
-  * PyPDF2      [Github](https://github.com/janoliver/PyPDF2)
-
 ## Acknowledgements
 
 The idea and many concepts of this script are taken from 
 [inkscapeslide](https://github.com/abourget/inkscapeslide).
 
-## Copyright
-
-Copyright 2013, Jan Oliver Oelerich <janoliver@oelerich.org>
