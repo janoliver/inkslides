@@ -1,26 +1,26 @@
-# Inkscapeslide2
+# InkSlides
 
 This script generates a PDF presentation out of a single inkscape
 document. 
 
 ## Installation
 
-Put the file `inkscapeslide.py` somewhere in your path (or into the 
+Put the file `inkslides.py` somewhere in your path (or into the
 directory your SVG presentation resides in and make it executable. 
 (Although you can execute it by running `python inkscapeslide.py` as
 well)
 
 Alternatively, on Arch Linux, you can install the AUR package
-[inkscapeslide2-git](https://aur.archlinux.org/packages/inkscapeslide2-git/).
+[inkslides-git](https://aur.archlinux.org/packages/inkslides-git/).
 
 ## Dependencies
 
 This script has the following dependencies:
 
   * inkscape
-  * Python 3
-  * python-lxml
-  * PyPDF2      [Github](https://github.com/janoliver/PyPDF2)
+  * Python > 2.6
+  * python-lxml (or python2-lxml)
+  * Any one of: PyPDF2, ghostscript, PDFJam, pdfunite
 
 ## Usage
 
@@ -41,8 +41,8 @@ but with SlideC also visible.
 
 Then
 
-    > chmod +x inkscapeslide.py
-    > ./inkscapeslide.py presentation.svg
+    > chmod +x inkslides.py
+    > ./inkslides.py presentation.svg
 
 If you pass the parameter `-t, --temp`, then no temporary files are
 kept by inkscapeslide. This, however, slows down the compilation,

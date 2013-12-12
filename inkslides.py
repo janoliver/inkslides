@@ -2,8 +2,33 @@
 # -=- encoding: utf-8 -=-
 
 """
+# InkSlides
+
 This script generates a PDF presentation out of a single inkscape
-document. In the inkscape document, there must be a layer named 
+document.
+
+## Installation
+
+Put the file `inkslides.py` somewhere in your path (or into the
+directory your SVG presentation resides in and make it executable.
+(Although you can execute it by running `python inkscapeslide.py` as
+well)
+
+Alternatively, on Arch Linux, you can install the AUR package
+[inkslides-git](https://aur.archlinux.org/packages/inkslides-git/).
+
+## Dependencies
+
+This script has the following dependencies:
+
+  * inkscape
+  * Python > 2.6
+  * python-lxml (or python2-lxml)
+  * Any one of: PyPDF2, ghostscript, PDFJam, pdfunite
+
+## Usage
+
+In the inkscape document, there must be a layer named
 "content" with a single text element. In that text element, each line
 is one slide of the resulting presentation. The format is the following
 
@@ -14,21 +39,23 @@ is one slide of the resulting presentation. The format is the following
     +SlideC
 
 In this example, the first slide consists of the content of layers
-SlideA and SlideB. The second slide would have the same content, 
+SlideA and SlideB. The second slide would have the same content,
 except SlideA has an opacity of 0.5. The third layer is the second
 but with SlideC also visible.
 
-This script has the following dependencies:
+Then
 
-  * inkscape
-  * Python > 2.6
-  * python-lxml (or python2-lxml)
-  * Any one of: PyPDF2, ghostscript, PDFJam, pdfunite
+    > chmod +x inkslides.py
+    > ./inkslides.py presentation.svg
 
-The idea and many concepts of this script are taken from 
+If you pass the parameter `-t, --temp`, then no temporary files are
+kept by inkscapeslide. This, however, slows down the compilation,
+because it recompiles all the slides!
+
+## Acknowledgements
+
+The idea and many concepts of this script are taken from
 [inkscapeslide](https://github.com/abourget/inkscapeslide).
-
-Copyright 2013, Jan Oliver Oelerich <janoliver@oelerich.org>
 """
 
 import lxml.etree as xml
@@ -40,6 +67,16 @@ import os
 import shutil
 import hashlib
 import sys
+
+
+__author__ = "Jan Oliver Oelerich"
+__copyright__ = "Copyright 2013, Universitaet Marburg"
+__credits__ = ["Jan Oliver Oelerich"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Jan Oliver Oelerich"
+__email__ = "janoliver@oelerich.org"
+__status__ = "Production"
 
 
 class MergeFailedException(Exception):
