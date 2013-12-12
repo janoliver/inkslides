@@ -21,9 +21,9 @@ but with SlideC also visible.
 This script has the following dependencies:
 
   * inkscape
-  * Python 3
-  * python-lxml
-  * PyPDF2
+  * Python > 2.6
+  * python-lxml (or python2-lxml)
+  * Any one of: PyPDF2, ghostscript, PDFJam, pdfunite
 
 The idea and many concepts of this script are taken from 
 [inkscapeslide](https://github.com/abourget/inkscapeslide).
@@ -34,20 +34,191 @@ Copyright 2013, Jan Oliver Oelerich <janoliver@oelerich.org>
 import lxml.etree as xml
 import copy
 import subprocess
-import PyPDF2
 import tempfile
 import argparse
 import os
 import shutil
 import hashlib
+import sys
 
 
-class InkscapeSlide(object):
+class MergeFailedException(Exception):
+    """Exception that indicates an Error during Merging of the PDF slides"""
+    pass
+
+
+class Merger(object):
+    """
+    Base class for a Merger. The type, python package or binary,
+    should be indicated in the static type field. The function merge
+    is handed a list of absolute paths to the single pdf slides,
+    and is responsible for merging them in the correct order, so that
+    the argument out_file is the merged PDF.
+    """
+
+    TYPE_BINARY = 1
+    TYPE_PACKAGE = 2
+
+    type = TYPE_BINARY
+
+    def merge(self, slides, out_file):
+        """Merges the slides and writes the result to out_file"""
+
+        raise NotImplementedError
+
+
+class PyPDFMerger(Merger):
+    """
+    Uses the PyPDF2 package to merge the PDFs.
+    """
+
+    type = Merger.TYPE_PACKAGE
+
+    def merge(self, slides, out_file):
+
+        try:
+            import PyPDF2
+
+            output = PyPDF2.PdfFileWriter()
+            streams = list()
+            for slide in slides:
+                stream = open(slide, "rb")
+                pypdf_file = PyPDF2.PdfFileReader(stream)
+                output.addPage(pypdf_file.getPage(0))
+                streams.append(stream)
+
+            with open(out_file, "wb") as out_stream:
+                output.write(out_stream)
+                for stream in streams:
+                    stream.close()
+
+        except:
+            raise MergeFailedException("Could not merge using PyPDF2")
+
+
+class TexliveMerger(Merger):
+    """
+    Uses the ghostscript binary `gs` to merge the slides. ghostscript
+    is usually included in Texlive installations and is probably available
+    on most Linux machines.
+    """
+
+    def merge(self, slides, out_file):
+        command = ["gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite",
+                   "-sOutputFile=%s" % out_file]
+
+        for slide in slides:
+            command.append(slide)
+
+        if subprocess.call(command):
+            raise MergeFailedException("Could not merge using %s" % command)
+
+
+class PdfjamMerger(Merger):
+    """
+    Uses the PDFJam to merge the PDFs, which usually must be installed
+    separately. Suppresses output.
+    """
+
+    def merge(self, slides, out_file):
+        command = ["pdfjam", "-q"]
+
+        for slide in slides:
+            command.append(slide)
+
+        command += ["-o", out_file]
+
+        if subprocess.call(command):
+            raise MergeFailedException("Could not merge using %s" % command)
+
+
+class PopplerMerger(Merger):
+    """
+    Uses the binary `pdfunite` to merge the PDF files, which is included in
+    the Poppler PDF engine, which is probably available on your machine.
+    """
+
+    def merge(self, slides, out_file):
+        command = ["pdfunite"]
+
+        for slide in slides:
+            command.append(slide)
+
+        command.append(out_file)
+
+        if subprocess.call(command):
+            raise MergeFailedException("Could not merge using %s" % command)
+
+
+class MergerWrapper(object):
+    """
+    This class looks for available tools to merge PDF files and, if a suitable
+    one is found, provides the merge() function to execute the merge.
+    """
+
+    TOOLS = (
+        ('PyPDF2', PyPDFMerger),
+        ('gs', PdfjamMerger),
+        ('pdfunite', PopplerMerger),
+        ('pdfjam', TexliveMerger),
+    )
+
+    def __init__(self):
+        self.merger = self.find_merging_tool()()
+
+        if not self.merger:
+            raise MergeFailedException("No tool to merge PDF Files available")
+
+    def merge(self, slides, tmp_dir):
+        self.merger.merge(slides, tmp_dir)
+
+    def find_merging_tool(self):
+        """Tests, which of the merger tools is available on the computer."""
+
+        for command, merger in self.TOOLS:
+
+            if merger.type == Merger.TYPE_BINARY:
+                if self.which(command):
+                    return merger
+
+            elif merger.type == Merger.TYPE_PACKAGE:
+                try:
+                    __import__(command)
+                    return merger
+
+                except ImportError:
+                    continue
+
+        return None
+
+    @staticmethod
+    def which(program):
+        """Resembles Unix's `which` utility, to check for executables.
+        Stolen from Stackoverflow. :)"""
+
+        def is_exe(fpath):
+            return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+        fpath, fname = os.path.split(program)
+        if fpath:
+            if is_exe(program):
+                return program
+        else:
+            for path in os.environ["PATH"].split(os.pathsep):
+                path = path.strip('"')
+                exe_file = os.path.join(path, program)
+                if is_exe(exe_file):
+                    return exe_file
+
+        return None
+
+
+class InkSlides(object):
     """
     This is the main class that does all the stuff. It is called
     as the following:
 
-        >> i = InkscapeSlide()
+        >> i = InkSlides()
         >> i.run("slides.svg")
 
     The class generates a "slides.pdf" in the same directory. 
@@ -109,11 +280,12 @@ class InkscapeSlide(object):
 
     def setup_temp_folder(self, temp):
         # create (or detect) the temporary directory. If the keep option was
-        # set, we use ./.inkscapeslide2 as temp folder. if it exists, we reuse
+        # set, we use ./.inkslides as temp folder. if it exists, we reuse
         # stuff from there. this speeds up everything by a lot. Otherwise,
         # create a temp folder in /tmp
         if not temp:
-            self.tmp_folder = './.inkscapeslide2'
+            base = os.path.splitext(os.path.basename(self.f_input))[0]
+            self.tmp_folder = './.inkslides-%s' % base
             if not os.path.exists(self.tmp_folder):
                 os.makedirs(self.tmp_folder)
         else:
@@ -211,6 +383,13 @@ class InkscapeSlide(object):
         one inkscape process to speed up the generation.
         """
 
+        if sys.version < '3':
+            def c_bytes(string, enc):
+                return bytes(string)
+        else:
+            def c_bytes(string, enc):
+                return bytes(string, enc)
+
         # this is our inkscape worker
         ink = subprocess.Popen(['inkscape', '--shell'],
                                stdin=subprocess.PIPE,
@@ -224,7 +403,7 @@ class InkscapeSlide(object):
         # The variable ready keeps track of that.
         ready = False
         counter = 0
-        all = len(self.svg_files)
+        num_all = len(self.svg_files)
         while True:
             if ready:
                 if not len(self.svg_files):
@@ -236,7 +415,7 @@ class InkscapeSlide(object):
 
                 # calculate percent of advance
                 counter += 1
-                percent = round(counter / all * 100.)
+                percent = int(round(100. * counter / num_all))
 
                 self.pdf_files.append(pdf_file)
 
@@ -244,7 +423,7 @@ class InkscapeSlide(object):
                 # else skip this slide
                 if not cached:
                     command = '-A {1} {0}\n'.format(svg_file, pdf_file)
-                    ink.stdin.write(bytes(command, 'utf_8'))
+                    ink.stdin.write(bytes(command, "utf_8"))
                     ink.stdin.flush()
 
                     print("  Converted {0} ({1:d}%)".format(
@@ -267,18 +446,8 @@ class InkscapeSlide(object):
         This function uses PyPDF2 to join the single PDF slides.
         """
 
-        output = PyPDF2.PdfFileWriter()
-        streams = list()
-        for slide in self.pdf_files:
-            stream = open(slide, "rb")
-            pypdf_file = PyPDF2.PdfFileReader(stream)
-            output.addPage(pypdf_file.getPage(0))
-            streams.append(stream)
-
-        with open(self.f_output, "wb") as out_file:
-            output.write(out_file)
-            for stream in streams:
-                stream.close()
+        merger = MergerWrapper()
+        merger.merge(self.pdf_files, self.f_output)
 
     def get_content_description(self):
         """
@@ -299,7 +468,7 @@ class InkscapeSlide(object):
 
             # if the line starts with a +, copy the last slide first
             if x.startswith('+'):
-                cache = layers[-1].copy()
+                cache = copy.copy(layers[-1])
                 x = x[1:]
 
             # this is a bit cryptic. It decodes each slide and the 
@@ -402,5 +571,5 @@ if __name__ == '__main__':
         help='The svg file to process')
     args = parser.parse_args()
 
-    i = InkscapeSlide()
+    i = InkSlides()
     i.run(file=args.file, temp=args.temp)
