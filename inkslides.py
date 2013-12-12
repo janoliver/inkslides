@@ -67,6 +67,7 @@ import os
 import shutil
 import hashlib
 import sys
+import time
 
 
 __author__ = "Jan Oliver Oelerich"
@@ -283,6 +284,22 @@ class InkSlides(object):
 
         # temp folder to use
         self.tmp_folder = None
+
+    def runwatch(self, file, temp=True):
+
+        print("Started continuous mode! Cancel with Ctrl+C")
+
+        state = None
+
+        while 1:
+            mtime = os.stat(file).st_mtime
+
+            if mtime != state:
+                print("Change detected. Recompiling...")
+                self.run(file, temp)
+                state = mtime
+
+            time.sleep(.5)
 
     def run(self, file, temp=True):
         """
@@ -604,9 +621,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Inkscapeslide.')
     parser.add_argument('-t', '--temp', action='store_true',
         help='don\'t keep the temporary files to speed up compilation')
+    parser.add_argument('-w', '--watch', action='store_true',
+        help='watch the input file for changes and automatically recompile')
     parser.add_argument('file', metavar='svg-file', type=str,
         help='The svg file to process')
     args = parser.parse_args()
 
     i = InkSlides()
-    i.run(file=args.file, temp=args.temp)
+
+    if args.watch:
+        i.runwatch(file=args.file, temp=args.temp)
+    else:
+        i.run(file=args.file, temp=args.temp)
