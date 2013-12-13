@@ -7,7 +7,7 @@ document.
 
 Put the file `inkslides.py` somewhere in your path (or into the
 directory your SVG presentation resides in and make it executable. 
-(Although you can execute it by running `python inkscapeslide.py` as
+(Although you can execute it by running `python inkslides.py` as
 well)
 
 Alternatively, on Arch Linux, you can install the AUR package
