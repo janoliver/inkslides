@@ -196,9 +196,9 @@ class MergerWrapper(object):
 
     TOOLS = (
         ('PyPDF2', PyPDFMerger),
-        ('gs', PdfjamMerger),
         ('pdfunite', PopplerMerger),
         ('pdfjam', TexliveMerger),
+        ('gs', PdfjamMerger),
     )
 
     def __init__(self):
