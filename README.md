@@ -49,6 +49,10 @@ If you pass the parameter `-t, --temp`, then no temporary files are
 kept by inkscapeslide. This, however, slows down the compilation,
 because it recompiles all the slides!
 
+In addition, you can give the `-w, --watch` parameter. If that one is 
+present, the script keeps running and watches the input SVG file for 
+changes. If one is detected, the presentation is automatically recompiled.
+
 ## Acknowledgements
 
 The idea and many concepts of this script are taken from 
