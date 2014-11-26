@@ -24,7 +24,7 @@ This script has the following dependencies:
   * inkscape
   * Python > 2.6
   * python-lxml (or python2-lxml)
-  * Any one of: PyPDF2, ghostscript, PDFJam, pdfunite
+  * Any one of: PyPDF2, ghostscript (comes with TeXLive), pdfunite
 
 ## Usage
 
