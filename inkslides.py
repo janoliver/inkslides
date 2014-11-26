@@ -143,28 +143,11 @@ class TexliveMerger(Merger):
 
     def merge(self, slides, out_file):
         command = ["gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite",
+                   "-dPDFSETTINGS=/prepress",
                    "-sOutputFile=%s" % out_file]
 
         for slide in slides:
             command.append(slide)
-
-        if subprocess.call(command):
-            raise MergeFailedException("Could not merge using %s" % command)
-
-
-class PdfjamMerger(Merger):
-    """
-    Uses the PDFJam to merge the PDFs, which usually must be installed
-    separately. Suppresses output.
-    """
-
-    def merge(self, slides, out_file):
-        command = ["pdfjam", "-q"]
-
-        for slide in slides:
-            command.append(slide)
-
-        command += ["-o", out_file]
 
         if subprocess.call(command):
             raise MergeFailedException("Could not merge using %s" % command)
@@ -197,8 +180,7 @@ class MergerWrapper(object):
     TOOLS = (
         ('PyPDF2', PyPDFMerger),
         ('pdfunite', PopplerMerger),
-        ('pdfjam', TexliveMerger),
-        ('gs', PdfjamMerger),
+        ('gs', TexliveMerger),
     )
 
     def __init__(self):
