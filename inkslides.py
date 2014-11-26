@@ -21,8 +21,9 @@ Alternatively, on Arch Linux, you can install the AUR package
 
 This script has the following dependencies:
 
+  * Linux (currently)
   * inkscape
-  * Python > 2.6
+  * Python >= 2.7
   * python-lxml (or python2-lxml)
   * Any one of: PyPDF2, ghostscript (comes with TeXLive), pdfunite
 
