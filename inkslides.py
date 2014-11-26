@@ -354,7 +354,7 @@ class InkSlides(object):
         Parse the input xml (svg) document and build up the 
         content description list.
         """
-        parser = xml.XMLParser(ns_clean=True)
+        parser = xml.XMLParser(ns_clean=True, huge_tree=True)
         self.doc = xml.parse(self.f_input, parser)
 
         # find the content descriptor, i.e., which slides to include when + how
