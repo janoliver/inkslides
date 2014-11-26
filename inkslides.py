@@ -459,7 +459,7 @@ class InkSlides(object):
                 # else skip this slide
                 if not cached:
                     command = '-A {1} {0}\n'.format(svg_file, pdf_file)
-                    ink.stdin.write(bytes(command, "utf_8"))
+                    ink.stdin.write(command.encode("UTF-8"))
                     ink.stdin.flush()
 
                     print("  Converted {0} ({1:d}%)".format(
