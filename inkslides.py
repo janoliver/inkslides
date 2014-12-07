@@ -463,7 +463,7 @@ class InkSlides(object):
                 # if no cached version, create new pdf by inkscape
                 # else skip this slide
                 if not cached:
-                    command = '-A {1} {0}\n'.format(svg_file, pdf_file)
+                    command = '-A "{1}" "{0}"\n'.format(svg_file, pdf_file)
                     ink.stdin.write(command.encode("UTF-8"))
                     ink.stdin.flush()
 
