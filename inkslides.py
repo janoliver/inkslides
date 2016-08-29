@@ -272,6 +272,9 @@ class InkSlides(object):
         # temp folder to use
         self.tmp_folder = None
 
+        # if true "master" will be appended to each slide at the front except the slide is called "title"
+        self.do_add_master = True
+
     def runwatch(self, file, temp=True):
 
         print("Started continuous mode! Cancel with Ctrl+C")
@@ -345,8 +348,12 @@ class InkSlides(object):
         self.doc = xml.parse(self.f_input, parser)
 
         # find the content descriptor, i.e., which slides to include when + how
-        self.content = self.get_content_description()
+        # self.content = self.get_content_description()
+        self.content = self.get_content_description_from_sublayer()
 
+        if self.do_add_master:
+            self.add_master(self.content)
+        
         # set all elements in the pdf to hidden
         self.hide_all(self.doc)
 
@@ -398,6 +405,17 @@ class InkSlides(object):
             cached = os.path.exists(svg_path)
             if cached:
                 old_hash = hashlib.sha256(open(svg_path, 'rb').read()).digest()
+
+            ##JG: add number to slides
+            #get preamble
+            Preamble="{"+tmp_doc.getroot().tag.split("{")[-1].split("}")[0]+"}"
+            for e in tmp_doc.getroot().iter(Preamble+'tspan'):
+                if e.text=="#Num#":
+                    e.text=str(num)
+
+            # for e in tmp_doc.xpath('//*[contains(local-name(),"#Num#")]'):
+            #     e.tag = e.tag.replace('#Num#',str(num))
+            # tmp_doc.tag = tmp_doc.tag.replace('#Num#',str(num))
 
             tmp_doc.write(svg_path)
 
@@ -490,10 +508,37 @@ class InkSlides(object):
         merger = MergerWrapper()
         merger.merge(self.pdf_files, self.f_output)
 
+    #JG: add masterslide to each slide
+    def add_master(self, content):
+        for slide in content:
+            if not slide[0]==['title']:
+                slide.insert(0,['master'])
+        return content
+
+    def parse_layers(self,content_lines_str):
+
+        layers = list()
+        for x in [l.strip() for l in content_lines_str]:
+            cache = list()
+
+            # if the line starts with a +, copy the last slide first
+            if x.startswith('+'):
+                cache = copy.copy(layers[-1])
+                x = x[1:]
+
+            # this is a bit cryptic. It decodes each slide and the
+            # corresponding opacity and writes in into the list.
+            cache.extend([[d.strip() for d in c.split('*')]
+                          for c in x.split(',')])
+
+            layers.append(cache)
+
+        return layers
+
     def get_content_description(self):
         """
         Here, the "content" layer is parsed and the self.content
-        array is being filled with the description of each slides 
+        array is being filled with the description of each slides
         content.
         """
 
@@ -503,23 +548,77 @@ class InkSlides(object):
             namespaces=self.nsmap
         )
 
-        layers = list()
-        for x in [l.text.strip() for l in content_lines]:
-            cache = list()
+        content_lines_str=[x.text for x in content_lines]
 
-            # if the line starts with a +, copy the last slide first
-            if x.startswith('+'):
-                cache = copy.copy(layers[-1])
-                x = x[1:]
+        return parse_layers(content_lines)
 
-            # this is a bit cryptic. It decodes each slide and the 
-            # corresponding opacity and writes in into the list.
-            cache.extend([[d.strip() for d in c.split('*')]
-                          for c in x.split(',')])
 
-            layers.append(cache)
+    def strip_ns(self,n,key='svg'):
+        return n.replace("{"+self.nsmap[key]+"}","")
 
-        return layers
+    def get_label(self,elem):
+        return elem.attrib[self.ns_join('label','inkscape')]
+
+    def is_layer(self,group):
+        Out=False
+        if self.strip_ns(group.tag)=='g' and self.ns_join('groupmode','inkscape') in group.attrib and group.attrib[self.ns_join('groupmode','inkscape')]=='layer':
+            Out = True
+        return Out
+
+    def is_text(self,group):
+        Out=False
+        if self.strip_ns(group.tag)=='text' and self.ns_join('groupmode','inkscape') in group.attrib and group.attrib[self.ns_join( 'groupmode','inkscape')]=='layer':
+            Out = True
+        return Out
+
+    def is_content_description(self,cur_content_lines):
+        return len(cur_content_lines)>0 and not cur_content_lines[0].text==None and cur_content_lines[0].text.strip()=='#content#'
+
+    def get_content_description_from_sublayer(self):
+        """
+        Here, the "content" layer is parsed and the self.content
+        array is being filled with the description of each slides
+        content.
+        Instead of reading the layer "content" the order of the layer is  given by the structure of sublayers.
+        Modified by JG.
+        """
+
+        content_lines=list()
+        root=self.doc.getroot()
+
+        do_iter_reversed=False
+        for sec in root.iterchildren(reversed=do_iter_reversed): #iterate in reverse because svg is formated in this way
+            if self.is_layer(sec): # this is a section
+                for slide in sec.iterchildren(reversed=do_iter_reversed):
+                    # if we have the #content# keyword here use original slide methodology
+                    cur_content_lines=slide.findall('svg:text/svg:tspan',self.nsmap)
+                    if self.is_content_description(cur_content_lines): 
+                        # add content to content lines
+                        del cur_content_lines[0]
+                        for l in cur_content_lines:
+                            if not l.text==None:
+                                cur_str=self.get_label(sec)+','+l.text
+                                content_lines.append(cur_str)
+
+                        # don't use sustructure for this slide anymore
+                        continue
+
+                    if self.is_layer(slide): # this is a slide
+
+                        #else structure slide as given by sublayers
+                        # content_line=self.get_label(sec)+","+self.get_label(slide)
+                        content_line=self.get_label(sec) # don't append slides these are only structuring elements
+                        #content_lines.append(content_line)
+
+                        for slide_layer in slide.iterchildren(reversed=do_iter_reversed):
+                            #if there is a text field with #content# in it subsitute it normally
+                            HasContentText=False
+
+                            if self.is_layer(slide_layer): #this is a layer of a slide
+                                content_line+=","+self.get_label(slide_layer)
+                                content_lines.append(content_line)
+        # pdb.set_trace()
+        return self.parse_layers(content_lines)
 
     def get_layers(self, doc):
         """
@@ -540,16 +639,36 @@ class InkSlides(object):
 
         return ret
 
+    def get_depth(self,layer):
+        if not layer.getparent() == None:
+            self.depth_count+=1
+            self.get_depth(layer.getparent())
+        else:
+            return
+
     def show_layer(self, layer, opacity=1.0):
         """
         Make a layer visible by setting the style= "display:inline"
         attribute.
         """
 
+        self.depth_count=0
+        self.get_depth(layer)
+
         styles = self.get_styles(layer)
         styles['display'] = 'inline'
         styles['opacity'] = str(opacity)
         self.set_styles(layer, styles)
+
+        # if self.depth_count==3: #this is slide_sublayer
+        cur_layer=layer
+        for i in range(0,self.depth_count):
+            cur_layer_par=cur_layer.getparent()
+            parent_styles=self.get_styles(cur_layer_par)
+            parent_styles['display'] = 'inline'
+            parent_styles['opacity'] = str(opacity) 
+            self.set_styles(cur_layer_par, parent_styles)
+            cur_layer=cur_layer_par
 
     def hide_all(self, doc):
         """
@@ -610,11 +729,16 @@ if __name__ == '__main__':
         help='don\'t keep the temporary files to speed up compilation')
     parser.add_argument('-w', '--watch', action='store_true',
         help='watch the input file for changes and automatically recompile')
+    parser.add_argument('-a','--not_add_master_slide', action='store_true' ,
+            help='do not add master layer , otherwise layer called "master" is automatically added to each slide (except if sequence starts with layer "title" )' )
+
     parser.add_argument('file', metavar='svg-file', type=str,
         help='The svg file to process')
     args = parser.parse_args()
 
     i = InkSlides()
+
+    i.do_add_master = not args.not_add_master_slide
 
     if args.watch:
         i.runwatch(file=args.file, temp=args.temp)
