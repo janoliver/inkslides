@@ -109,7 +109,3 @@ The idea and many concepts of this script are taken from
 ## Modified
 Johannes Graeter: added slide enumeration
 Johannes Graeter: added structuring by layers
-
-## TODO 
-Video embedding
-

@@ -19,9 +19,9 @@ import tempfile
 import time
 
 from lxml.etree import XMLParser, parse
+from inkslides.utils import *
 
-from merge import MergerWrapper
-from utils import *
+from inkslides.merge import MergerWrapper
 
 __author__ = "Jan Oliver Oelerich"
 __copyright__ = "Copyright 2013, Universitaet Marburg"
@@ -338,7 +338,7 @@ class InkSlides(object):
         return ".".join(svg_file_name.split('.')[:-1]) + '.pdf'
 
 
-if __name__ == '__main__':
+def main():
     # when the script is called directly...
 
     # command line args
