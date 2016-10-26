@@ -6,74 +6,22 @@
 
 This script generates a PDF presentation out of a single inkscape
 document.
-
-## Installation
-
-Put the file `inkslides.py` somewhere in your path (or into the
-directory your SVG presentation resides in and make it executable.
-(Although you can execute it by running `python inkscapeslide.py` as
-well)
-
-Alternatively, on Arch Linux, you can install the AUR package
-[inkslides-git](https://aur.archlinux.org/packages/inkslides-git/).
-
-## Dependencies
-
-This script has the following dependencies:
-
-  * Linux (currently)
-  * inkscape
-  * Python >= 2.7
-  * python-lxml (or python2-lxml)
-  * Any one of: PyPDF2, ghostscript (comes with TeXLive), pdfunite
-
-## Usage
-
-In the inkscape document, there must be a layer named
-"content" with a single text element. In that text element, each line
-is one slide of the resulting presentation. The format is the following
-
-    content layer text field
-    ------------------------
-    SlideA, SlideB
-    SlideA*0.5, SlideB
-    +SlideC
-
-In this example, the first slide consists of the content of layers
-SlideA and SlideB. The second slide would have the same content,
-except SlideA has an opacity of 0.5. The third layer is the second
-but with SlideC also visible.
-
-Then
-
-    > chmod +x inkslides.py
-    > ./inkslides.py presentation.svg
-
-If you pass the parameter `-t, --temp`, then no temporary files are
-kept by inkscapeslide. This, however, slows down the compilation,
-because it recompiles all the slides!
-
-In addition, you can give the `-w, --watch` parameter. If that one is
-present, the script keeps running and watches the input SVG file for
-changes. If one is detected, the presentation is automatically recompiled.
-
-## Acknowledgements
-
-The idea and many concepts of this script are taken from
-[inkscapeslide](https://github.com/abourget/inkscapeslide).
 """
 
-import lxml.etree as xml
-import copy
-import subprocess
-import tempfile
 import argparse
+import copy
+import hashlib
 import os
 import shutil
-import hashlib
+import subprocess
 import sys
+import tempfile
 import time
 
+from lxml.etree import XMLParser, parse
+
+from merge import MergerWrapper
+from utils import *
 
 __author__ = "Jan Oliver Oelerich"
 __copyright__ = "Copyright 2013, Universitaet Marburg"
@@ -83,159 +31,6 @@ __version__ = "1.0.0"
 __maintainer__ = "Jan Oliver Oelerich"
 __email__ = "janoliver@oelerich.org"
 __status__ = "Production"
-
-
-class MergeFailedException(Exception):
-    """Exception that indicates an Error during Merging of the PDF slides"""
-    pass
-
-
-class Merger(object):
-    """
-    Base class for a Merger. The type, python package or binary,
-    should be indicated in the static type field. The function merge
-    is handed a list of absolute paths to the single pdf slides,
-    and is responsible for merging them in the correct order, so that
-    the argument out_file is the merged PDF.
-    """
-
-    TYPE_BINARY = 1
-    TYPE_PACKAGE = 2
-
-    type = TYPE_BINARY
-
-    def merge(self, slides, out_file):
-        """Merges the slides and writes the result to out_file"""
-
-        raise NotImplementedError
-
-
-class PyPDFMerger(Merger):
-    """
-    Uses the PyPDF2 package to merge the PDFs.
-    """
-
-    type = Merger.TYPE_PACKAGE
-
-    def merge(self, slides, out_file):
-
-        try:
-            import PyPDF2
-
-            output = PyPDF2.PdfFileWriter()
-            streams = list()
-            for slide in slides:
-                stream = open(slide, "rb")
-                pypdf_file = PyPDF2.PdfFileReader(stream)
-                output.addPage(pypdf_file.getPage(0))
-                streams.append(stream)
-
-            with open(out_file, "wb") as out_stream:
-                output.write(out_stream)
-                for stream in streams:
-                    stream.close()
-
-        except:
-            raise MergeFailedException("Could not merge using PyPDF2")
-
-
-class TexliveMerger(Merger):
-    """
-    Uses the ghostscript binary `gs` to merge the slides. ghostscript
-    is usually included in Texlive installations and is probably available
-    on most Linux machines.
-    """
-
-    def merge(self, slides, out_file):
-        command = ["gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite",
-                   "-dPDFSETTINGS=/prepress",
-                   "-sOutputFile=%s" % out_file]
-
-        for slide in slides:
-            command.append(slide)
-
-        if subprocess.call(command):
-            raise MergeFailedException("Could not merge using %s" % command)
-
-
-class PopplerMerger(Merger):
-    """
-    Uses the binary `pdfunite` to merge the PDF files, which is included in
-    the Poppler PDF engine, which is probably available on your machine.
-    """
-
-    def merge(self, slides, out_file):
-        command = ["pdfunite"]
-
-        for slide in slides:
-            command.append(slide)
-
-        command.append(out_file)
-
-        if subprocess.call(command):
-            raise MergeFailedException("Could not merge using %s" % command)
-
-
-class MergerWrapper(object):
-    """
-    This class looks for available tools to merge PDF files and, if a suitable
-    one is found, provides the merge() function to execute the merge.
-    """
-
-    TOOLS = (
-        ('PyPDF2', PyPDFMerger),
-        ('pdfunite', PopplerMerger),
-        ('gs', TexliveMerger),
-    )
-
-    def __init__(self):
-        self.merger = self.find_merging_tool()()
-
-        if not self.merger:
-            raise MergeFailedException("No tool to merge PDF Files available")
-
-    def merge(self, slides, tmp_dir):
-        self.merger.merge(slides, tmp_dir)
-
-    def find_merging_tool(self):
-        """Tests, which of the merger tools is available on the computer."""
-
-        for command, merger in self.TOOLS:
-
-            if merger.type == Merger.TYPE_BINARY:
-                if self.which(command):
-                    return merger
-
-            elif merger.type == Merger.TYPE_PACKAGE:
-                try:
-                    __import__(command)
-                    return merger
-
-                except ImportError:
-                    continue
-
-        return None
-
-    @staticmethod
-    def which(program):
-        """Resembles Unix's `which` utility, to check for executables.
-        Stolen from Stackoverflow. :)"""
-
-        def is_exe(fpath):
-            return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
-
-        fpath, fname = os.path.split(program)
-        if fpath:
-            if is_exe(program):
-                return program
-        else:
-            for path in os.environ["PATH"].split(os.pathsep):
-                path = path.strip('"')
-                exe_file = os.path.join(path, program)
-                if is_exe(exe_file):
-                    return exe_file
-
-        return None
 
 
 class InkSlides(object):
@@ -249,11 +44,6 @@ class InkSlides(object):
     The class generates a "slides.pdf" in the same directory. 
     Depending on the number of slides, this may take a while.
     """
-    nsmap = {
-        'svg': 'http://www.w3.org/2000/svg',
-        'inkscape': 'http://www.inkscape.org/namespaces/inkscape',
-        'sodipodi': 'http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd'
-    }
 
     def __init__(self):
 
@@ -271,9 +61,6 @@ class InkSlides(object):
 
         # temp folder to use
         self.tmp_folder = None
-
-        # if true "master" will be appended to each slide at the front except the slide is called "title"
-        self.do_add_master = True
 
     def runwatch(self, file, temp=True):
 
@@ -344,18 +131,15 @@ class InkSlides(object):
         Parse the input xml (svg) document and build up the 
         content description list.
         """
-        parser = xml.XMLParser(ns_clean=True, huge_tree=True)
-        self.doc = xml.parse(self.f_input, parser)
+        parser = XMLParser(ns_clean=True, huge_tree=True)
+        self.doc = parse(self.f_input, parser=parser)
 
         # find the content descriptor, i.e., which slides to include when + how
         # self.content = self.get_content_description()
-        self.content = self.get_content_description_from_sublayer()
+        self.content = self.get_layer_structure()
 
-        if self.do_add_master:
-            self.add_master(self.content)
-        
         # set all elements in the pdf to hidden
-        self.hide_all(self.doc)
+        hide_all_layers(self.doc)
 
     def create_slides_svg(self):
         """
@@ -373,27 +157,23 @@ class InkSlides(object):
 
             # we copy the document instance and work on that copy
             tmp_doc = copy.deepcopy(self.doc)
-            tmp_layers = self.get_layers(tmp_doc)
+            tmp_layers = get_all_layers(tmp_doc)
 
-            # set the slide layers to visible and apply opacity
+            # set the slide layers to visible and apply opacity 1.0
             for layer in slide:
-                if len(layer) == 1:
-                    layer.append('1.0')
-
-                self.show_layer(tmp_layers[layer[0]], layer[1])
+                show_layer(tmp_layers[layer])
 
             # add the hidden elements to the to-delete list
             to_be_deleted = tmp_doc.xpath(
                 '/*/svg:g[@inkscape:groupmode="layer"][contains(\
                 @style, "display:none")]',
-                namespaces=self.nsmap
+                namespaces=nsmap
             )
 
             # add the sodipodi:namedview element, which is just inkscape
             # related stuff
             to_be_deleted.append(
-                tmp_doc.xpath('//sodipodi:namedview', namespaces=self.nsmap
-                )[0])
+                tmp_doc.xpath('//sodipodi:namedview', namespaces=nsmap)[0])
 
             # delete them
             for layer in to_be_deleted:
@@ -406,16 +186,9 @@ class InkSlides(object):
             if cached:
                 old_hash = hashlib.sha256(open(svg_path, 'rb').read()).digest()
 
-            ##JG: add number to slides
-            #get preamble
-            Preamble="{"+tmp_doc.getroot().tag.split("{")[-1].split("}")[0]+"}"
-            for e in tmp_doc.getroot().iter(Preamble+'tspan'):
-                if e.text=="#Num#":
-                    e.text=str(num)
-
-            # for e in tmp_doc.xpath('//*[contains(local-name(),"#Num#")]'):
-            #     e.tag = e.tag.replace('#Num#',str(num))
-            # tmp_doc.tag = tmp_doc.tag.replace('#Num#',str(num))
+            # replace text elements containing #num# with the slide number
+            for e in tmp_doc.xpath('//svg:text/svg:tspan[text()="#num#"]', namespaces=nsmap):
+                e.text = str(num)
 
             tmp_doc.write(svg_path)
 
@@ -425,8 +198,7 @@ class InkSlides(object):
                 # if the hashes are equal AND the corresponding pdf file exists,
                 # we can use the cached version and don't have to go through
                 # inkscape again. yay!
-                cached = old_hash == new_hash and os.path.exists(
-                    self.pdf_from_svg(svg_path))
+                cached = old_hash == new_hash and os.path.exists(self.pdf_from_svg(svg_path))
 
             self.svg_files.append((svg_path, cached))
 
@@ -508,213 +280,59 @@ class InkSlides(object):
         merger = MergerWrapper()
         merger.merge(self.pdf_files, self.f_output)
 
-    #JG: add masterslide to each slide
-    def add_master(self, content):
-        for slide in content:
-            if not slide[0]==['title']:
-                slide.insert(0,['master'])
-        return content
+    def add_master_layers(self, current_layers):
+        # this function checks for a #master# text element anywhere and, if present, adds the
+        # following lines as layers to current_layers
+        cur_content_lines = self.doc.xpath('//svg:text/svg:tspan[starts-with(text(),"#master#")]/..', namespaces=nsmap)
 
-    def parse_layers(self,content_lines_str):
+        if cur_content_lines and len(cur_content_lines[0]) > 0:
+            for l in cur_content_lines[0][1:]:
+                if l.text is not None:
+                    current_layers.append(l.text.strip())
 
-        layers = list()
-        for x in [l.strip() for l in content_lines_str]:
-            cache = list()
+    def add_imported_layers(self, layer, current_layers):
+        # this function checks for a #content# text element and, if present, adds the
+        # following lines as layers to current_layers
+        cur_content_lines = layer.xpath('./svg:text/svg:tspan[starts-with(text(),"#import#")]/..', namespaces=nsmap)
 
-            # if the line starts with a +, copy the last slide first
-            if x.startswith('+'):
-                cache = copy.copy(layers[-1])
-                x = x[1:]
+        if cur_content_lines and len(cur_content_lines[0]) > 0:
+            for l in cur_content_lines[0][1:]:
+                if l.text is not None:
+                    if l.text[0] == "-":
+                        current_layers.remove(l.text[1:])
+                    else:
+                        current_layers.append(l.text.strip())
 
-            # this is a bit cryptic. It decodes each slide and the
-            # corresponding opacity and writes in into the list.
-            cache.extend([[d.strip() for d in c.split('*')]
-                          for c in x.split(',')])
-
-            layers.append(cache)
-
-        return layers
-
-    def get_content_description(self):
+    def get_layer_structure(self):
         """
-        Here, the "content" layer is parsed and the self.content
-        array is being filled with the description of each slides
-        content.
+        Determine the layer structure
         """
+        slide_tree = list()
 
-        content_lines = self.doc.xpath(
-            '//svg:g[@inkscape:groupmode="layer"][\
-            @inkscape:label="content"]/svg:text/svg:tspan[text()]',
-            namespaces=self.nsmap
-        )
+        # iterate in reverse because svg is formated in this way
+        for sec in self.doc.getroot().xpath('./svg:g[@inkscape:groupmode="layer"]', namespaces=nsmap):
 
-        content_lines_str=[x.text for x in content_lines]
+            for slide in sec.xpath('./svg:g[@inkscape:groupmode="layer"]', namespaces=nsmap):
+                current_slide = [get_label(sec), get_label(slide)]
+                self.add_master_layers(current_slide)
+                self.add_imported_layers(slide, current_slide)
 
-        return parse_layers(content_lines)
+                sublayers = slide.xpath('./svg:g[@inkscape:groupmode="layer"]', namespaces=nsmap)
 
+                if sublayers:
+                    # here, the sublayers of the sublayer are present, which are treated as frames.
+                    # We add them as frames to slide_tree
 
-    def strip_ns(self,n,key='svg'):
-        return n.replace("{"+self.nsmap[key]+"}","")
+                    for sublayer in sublayers:
+                        current_slide.append(get_label(sublayer))
+                        self.add_imported_layers(sublayer, current_slide)
+                        slide_tree.append(current_slide.copy())
 
-    def get_label(self,elem):
-        return elem.attrib[self.ns_join('label','inkscape')]
+                else:
+                    # no sublayers present, we therefore add the current layer
+                    slide_tree.append(current_slide)
 
-    def is_layer(self,group):
-        Out=False
-        if self.strip_ns(group.tag)=='g' and self.ns_join('groupmode','inkscape') in group.attrib and group.attrib[self.ns_join('groupmode','inkscape')]=='layer':
-            Out = True
-        return Out
-
-    def is_text(self,group):
-        Out=False
-        if self.strip_ns(group.tag)=='text' and self.ns_join('groupmode','inkscape') in group.attrib and group.attrib[self.ns_join( 'groupmode','inkscape')]=='layer':
-            Out = True
-        return Out
-
-    def is_content_description(self,cur_content_lines):
-        return len(cur_content_lines)>0 and not cur_content_lines[0].text==None and cur_content_lines[0].text.strip()=='#content#'
-
-    def get_content_description_from_sublayer(self):
-        """
-        Here, the "content" layer is parsed and the self.content
-        array is being filled with the description of each slides
-        content.
-        Instead of reading the layer "content" the order of the layer is  given by the structure of sublayers.
-        Modified by JG.
-        """
-
-        content_lines=list()
-        root=self.doc.getroot()
-
-        do_iter_reversed=False
-        for sec in root.iterchildren(reversed=do_iter_reversed): #iterate in reverse because svg is formated in this way
-            if self.is_layer(sec): # this is a section
-                for slide in sec.iterchildren(reversed=do_iter_reversed):
-                    # if we have the #content# keyword here use original slide methodology
-                    cur_content_lines=slide.findall('svg:text/svg:tspan',self.nsmap)
-                    if self.is_content_description(cur_content_lines): 
-                        # add content to content lines
-                        del cur_content_lines[0]
-                        for l in cur_content_lines:
-                            if not l.text==None:
-                                cur_str=self.get_label(sec)+','+l.text
-                                content_lines.append(cur_str)
-
-                        # don't use sustructure for this slide anymore
-                        continue
-
-                    if self.is_layer(slide): # this is a slide
-
-                        #else structure slide as given by sublayers
-                        # content_line=self.get_label(sec)+","+self.get_label(slide)
-                        content_line=self.get_label(sec) # don't append slides these are only structuring elements
-                        #content_lines.append(content_line)
-
-                        for slide_layer in slide.iterchildren(reversed=do_iter_reversed):
-                            #if there is a text field with #content# in it subsitute it normally
-                            HasContentText=False
-
-                            if self.is_layer(slide_layer): #this is a layer of a slide
-                                content_line+=","+self.get_label(slide_layer)
-                                content_lines.append(content_line)
-        # pdb.set_trace()
-        return self.parse_layers(content_lines)
-
-    def get_layers(self, doc):
-        """
-        Here, a dict of all the layers in the lxml svg document
-        are built up. The key is a string, the layer's name, the 
-        value is the lxml.Element object of the layer.
-        """
-
-        ret = dict()
-
-        layers = doc.xpath(
-            '//svg:g[@inkscape:groupmode="layer"]',
-            namespaces=self.nsmap
-        )
-
-        for layer in layers:
-            ret[self.get_attr(layer, 'label')] = layer
-
-        return ret
-
-    def get_depth(self,layer):
-        if not layer.getparent() == None:
-            self.depth_count+=1
-            self.get_depth(layer.getparent())
-        else:
-            return
-
-    def show_layer(self, layer, opacity=1.0):
-        """
-        Make a layer visible by setting the style= "display:inline"
-        attribute.
-        """
-
-        self.depth_count=0
-        self.get_depth(layer)
-
-        styles = self.get_styles(layer)
-        styles['display'] = 'inline'
-        styles['opacity'] = str(opacity)
-        self.set_styles(layer, styles)
-
-        # if self.depth_count==3: #this is slide_sublayer
-        cur_layer=layer
-        for i in range(0,self.depth_count):
-            cur_layer_par=cur_layer.getparent()
-            parent_styles=self.get_styles(cur_layer_par)
-            parent_styles['display'] = 'inline'
-            parent_styles['opacity'] = str(opacity) 
-            self.set_styles(cur_layer_par, parent_styles)
-            cur_layer=cur_layer_par
-
-    def hide_all(self, doc):
-        """
-        Hide all layers by setting the style= "display:none"
-        attribute.
-        """
-
-        layers = self.get_layers(doc)
-        for name, layer in layers.items():
-            styles = self.get_styles(layer)
-            styles['display'] = 'none'
-            styles['opacity'] = '1.0'
-            self.set_styles(layer, styles)
-
-    def get_attr(self, el, attr, ns='inkscape'):
-        """
-        Get an attribute value of an lxml element "el"
-        """
-
-        return el.attrib.get(self.ns_join(attr, ns), False)
-
-    def get_styles(self, el):
-        """
-        Get a dict of the content of the style="a:b;c:d" attribute
-        """
-
-        items = self.get_attr(el, 'style', 'svg')
-        if not items:
-            return dict()
-        return dict(item.split(':') for item in items.split(';'))
-
-    def set_styles(self, el, styles):
-        """
-        Set the style="" attribute from a dict.
-        """
-
-        s = ";".join(sorted(["{}:{}".format(k, v) for k, v in styles.items()]))
-        el.attrib['style'] = s
-
-    def ns_join(self, tag, namespace=None):
-        """
-        This function generates a {namespace}tag string out of a 
-        namespace keyword and the tagname.
-        """
-
-        return '{%s}%s' % (self.nsmap[namespace], tag)
+        return slide_tree
 
     def pdf_from_svg(self, svg_file_name):
         return ".".join(svg_file_name.split('.')[:-1]) + '.pdf'
@@ -726,19 +344,15 @@ if __name__ == '__main__':
     # command line args
     parser = argparse.ArgumentParser(description='Inkscapeslide.')
     parser.add_argument('-t', '--temp', action='store_true',
-        help='don\'t keep the temporary files to speed up compilation')
+                        help='don\'t keep the temporary files to speed up compilation')
     parser.add_argument('-w', '--watch', action='store_true',
-        help='watch the input file for changes and automatically recompile')
-    parser.add_argument('-a','--not_add_master_slide', action='store_true' ,
-            help='do not add master layer , otherwise layer called "master" is automatically added to each slide (except if sequence starts with layer "title" )' )
+                        help='watch the input file for changes and automatically recompile')
 
     parser.add_argument('file', metavar='svg-file', type=str,
-        help='The svg file to process')
+                        help='The svg file to process')
     args = parser.parse_args()
 
     i = InkSlides()
-
-    i.do_add_master = not args.not_add_master_slide
 
     if args.watch:
         i.runwatch(file=args.file, temp=args.temp)

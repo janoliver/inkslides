@@ -1,4 +1,0 @@
-gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -sOutputFile=output.pdf Vortrag_WISE_2015.pdf
-
-or further size reduction
-gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dDownsampleColorImages=true -dColorImageResolution=150 -dCompatibilityLevel=1.4 -sOutputFile=output.pdf input.pdf

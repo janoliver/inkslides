@@ -23,26 +23,66 @@ This script has the following dependencies:
   * python-lxml (or python2-lxml)
   * Any one of: PyPDF2, ghostscript (comes with TeXLive), pdfunite
 
-## Usage
+## SVG structure
 
-The inkscape document must be structured as the file example.svg in this folder:
+inkslides decides, what to include in the presentation, by looking at the layer structure
+of the SVG file. A layer is included if it is a sublayer of any other layer. When it contains
+another level of layers, i.e., sublayers of sublayers, these are included one by one while their
+siblings are still visible. For example, consider this layer structure:
 
-Each slide consists of a layer of sublayers.
-On each sublayer you can define the part of the slide that should be overlain over the precedent layers.
-In that way you can realize animations while structuring your presentation.
-You may structure your svg files by putting the "slide" layers into groups.
-Slides and groups can therefore be deactivated by only one click on the "eye" icon in the layer menu.
+```
+Polar bears
+  Why polar bears are cool
+    Argument 3
+    Argument 2
+    Argument 1
+  Weaknesses of polar bears
+Title
+  Welcome
+```
 
-To reuse common layers you can specify links to layers by including a text-field with 
-"#content#
-Sublayer1, Sublayer2"
+This would result in a PDF with the following slides, where each line contains the visible layers on 
+one page.
 
-No seperate structuring layer is needed anymore.
+```
+Title,Welcome
+Polar beares,Why polar bears are cool,Argument 1
+Polar beares,Why polar bears are cool,Argument 1,Argument 2
+Polar beares,Why polar bears are cool,Argument 1,Argument 2,Argument 3
+Polar beares,Weaknesses of polar bears
+```
 
-Then
+As you can see, the polar bear slide builds up its argument as frames, much like it is known from usual 
+PowerPoint presentations. If there are no sublayers of sublayers, we end up with a simple slide without
+any frames.
 
-    > chmod +x inkslides.py
-    > ./inkslides.py example.svg
+To reuse common layers you can, at any layer that is not a root layer, import other layers by defining a
+text element whose first line contains `#import#`. The following lines should contain the name of the layers
+to be imported. For example
+
+```
+#import#
+Argument 3
+Weaknesses of polar bears
+```
+
+would import the two named layers into the current one. Note: If any of the layers to be imported has a `-` (minus)
+sign prefixed, it will not be imported but rather _deleted_ from the current layer list. This is particularly useful
+for the master layer function explained hereafter.
+
+Lastly, inkslides searches for a text element starting with `#master#`. The syntax is similar to the `#import#` structure. 
+All layers you list in the master block are visible on every single slide of your presentation. You may disable them by an
+`#import#` directive with one of the master layers prefixed with a `-`. Note, that the master block can appear _anywhere_ in 
+your SVG file. 
+
+If multiple `#master#` blocks are found globally, or multiple `#import#` blocks are present in one layer, the first one is 
+chosen and the others are ignored. 
+
+## script usage
+```
+> chmod +x inkslides.py
+> ./inkslides.py example.svg
+```
 
 If you pass the parameter `-t, --temp`, then no temporary files are
 kept by inkscapeslide. This, however, slows down the compilation,
@@ -52,18 +92,21 @@ In addition, you can give the `-w, --watch` parameter. If that one is
 present, the script keeps running and watches the input SVG file for 
 changes. If one is detected, the presentation is automatically recompiled.
 
-Johannes Graeter:
--Don't embed images but link them otherwise the file will be huge.
+Try not to embed images but link them, otherwise the file will be huge.
 
--To compress the output pdf-files use ghostcript, f.e.
- gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dDownsampleColorImages=true -dColorImageResolution=150 -dCompatibilityLevel=1.4 -sOutputFile=$output$.pdf $input$.pdf
+To compress the output PDF files, you may use ghostcript. For example:
+
+```
+> gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dDownsampleColorImages=true -dColorImageResolution=150 -dCompatibilityLevel=1.4 -sOutputFile=$output$.pdf $input$.pdf
+
+```
 
 ## Acknowledgements
 
 The idea and many concepts of this script are taken from 
 [inkscapeslide](https://github.com/abourget/inkscapeslide).
 
-##Modified
+## Modified
 Johannes Graeter: added slide enumeration
 Johannes Graeter: added structuring by layers
 
