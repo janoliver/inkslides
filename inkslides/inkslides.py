@@ -151,9 +151,9 @@ class InkSlides(object):
         only_cached = True
         self.svg_files = list()
 
-        for num, slide in enumerate(self.content):
+        for frame_num, (slide_num, slide) in enumerate(self.content):
 
-            svg_path = '{1}/slide-{0}.svg'.format(num, self.tmp_folder)
+            svg_path = '{1}/slide-{0}.svg'.format(frame_num, self.tmp_folder)
 
             # we copy the document instance and work on that copy
             tmp_doc = copy.deepcopy(self.doc)
@@ -188,7 +188,11 @@ class InkSlides(object):
 
             # replace text elements containing #num# with the slide number
             for e in tmp_doc.xpath('//svg:text/svg:tspan[text()="#num#"]', namespaces=nsmap):
-                e.text = str(num)
+                e.text = str(slide_num)
+
+            # replace text elements containing #num# with the slide number
+            for e in tmp_doc.xpath('//svg:text/svg:tspan[text()="#frame_num#"]', namespaces=nsmap):
+                e.text = str(frame_num)
 
             tmp_doc.write(svg_path)
 
@@ -307,12 +311,16 @@ class InkSlides(object):
         """
         Determine the layer structure
         """
-        slide_tree = list()
+        slide_tree = []
+        num_slide = 0
 
         # iterate in reverse because svg is formated in this way
         for sec in self.doc.getroot().xpath('./svg:g[@inkscape:groupmode="layer"]', namespaces=nsmap):
 
             for slide in sec.xpath('./svg:g[@inkscape:groupmode="layer"]', namespaces=nsmap):
+
+                num_slide += 1
+
                 current_slide = [get_label(sec), get_label(slide)]
                 self.add_master_layers(current_slide)
                 self.add_imported_layers(slide, current_slide)
@@ -326,11 +334,11 @@ class InkSlides(object):
                     for sublayer in sublayers:
                         current_slide.append(get_label(sublayer))
                         self.add_imported_layers(sublayer, current_slide)
-                        slide_tree.append(current_slide.copy())
+                        slide_tree.append((num_slide, current_slide.copy()))
 
                 else:
                     # no sublayers present, we therefore add the current layer
-                    slide_tree.append(current_slide)
+                    slide_tree.append((num_slide, current_slide.copy()))
 
         return slide_tree
 
