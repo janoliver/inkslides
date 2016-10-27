@@ -11,17 +11,20 @@ document.
 import argparse
 import copy
 import hashlib
+import multiprocessing
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+from multiprocessing import Queue
 
 from lxml.etree import XMLParser, parse
-from inkslides.utils import *
 
+from inkslides.inkscape import InkscapeWorker
 from inkslides.merge import MergerWrapper
+from inkslides.utils import *
 
 __author__ = "Jan Oliver Oelerich"
 __copyright__ = "Copyright 2013, Universitaet Marburg"
@@ -45,7 +48,7 @@ class InkSlides(object):
     Depending on the number of slides, this may take a while.
     """
 
-    def __init__(self):
+    def __init__(self, num_workers):
 
         # Input and output filenames
         self.f_input = None
@@ -61,6 +64,8 @@ class InkSlides(object):
 
         # temp folder to use
         self.tmp_folder = None
+
+        self.num_workers = num_workers
 
     def runwatch(self, file, temp=True):
 
@@ -98,8 +103,33 @@ class InkSlides(object):
             print("PDF should be up to date. Quitting ...")
             return
 
-        print("Creating PDF slides ...")
-        self.create_slides_pdf()
+        print("Creating PDF slides in parallel on {} workers...".format(self.num_workers))
+
+        # spawn a pool of workers and set up a request queue
+        # see http://stackoverflow.com/a/9039979/169748
+        workers = []
+        request_queue = Queue()
+        for i in range(self.num_workers):
+            workers.append(InkscapeWorker(request_queue))
+
+        # start workers
+        for w in workers:
+            w.start()
+
+        # populate the queue
+        self.pdf_files = []
+        for svg_file, cached in self.svg_files:
+            pdf_file = self.pdf_from_svg(svg_file)
+            self.pdf_files.append(pdf_file)
+            request_queue.put((svg_file, pdf_file, cached))
+
+        # Sentinel objects to allow clean shutdown: 1 per worker.
+        for i in range(self.num_workers):
+            request_queue.put(None)
+
+        # wait for workers to be finished
+        for w in workers:
+            w.join()
 
         print("Merging PDF slides ...")
         self.join_slides_pdf()
@@ -355,12 +385,12 @@ def main():
                         help='don\'t keep the temporary files to speed up compilation')
     parser.add_argument('-w', '--watch', action='store_true',
                         help='watch the input file for changes and automatically recompile')
-
-    parser.add_argument('file', metavar='svg-file', type=str,
-                        help='The svg file to process')
+    parser.add_argument('-p', '--parallel-workers', type=int, default=multiprocessing.cpu_count(),
+                        help='The number of inkscape workers to spawn.')
+    parser.add_argument('file', metavar='svg-file', type=str, help='The svg file to process')
     args = parser.parse_args()
 
-    i = InkSlides()
+    i = InkSlides(args.parallel_workers)
 
     if args.watch:
         i.runwatch(file=args.file, temp=args.temp)
