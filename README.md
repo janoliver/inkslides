@@ -1,21 +1,20 @@
 # InkSlides
 
-This script generates a PDF presentation out of a single inkscape
-document. 
+`inkslides` generates a PDF presentation out of an inkscape SVG
+document. The order of slides and visibility of content is determined
+by the layer structure of the SVG. 
 
 ## Installation
 
-Put the file `inkslides.py` somewhere in your path (or into the
-directory your SVG presentation resides in and make it executable. 
-(Although you can execute it by running `python inkslides.py` as
-well)
+Clone the repository somewhere and type
 
-Alternatively, on Arch Linux, you can install the AUR package
-[inkslides-git](https://aur.archlinux.org/packages/inkslides-git/).
+```
+> python setup.py install
+```
 
-## Dependencies
+## Requirements
 
-This script has the following dependencies:
+This program has the following requirements:
 
   * Linux (currently)
   * inkscape
@@ -23,12 +22,15 @@ This script has the following dependencies:
   * python-lxml (or python2-lxml)
   * Any one of: PyPDF2, ghostscript (comes with TeXLive), pdfunite
 
-## SVG structure
+## Usage
 
-inkslides decides, what to include in the presentation, by looking at the layer structure
-of the SVG file. A layer is included if it is a sublayer of any other layer. When it contains
-another level of layers, i.e., sublayers of sublayers, these are included one by one while their
-siblings are still visible. For example, consider this layer structure:
+### SVG layer structure
+
+`inkslides` decides, what to include in the presentation, by looking at the 
+layer structure of the SVG file. A layer is included if it is a sublayer of 
+any other layer. When it contains another level of layers, i.e., sublayers 
+of sublayers, these are included one by one while their siblings are still 
+visible. For example, consider this layer structure:
 
 ```
 Polar bears
@@ -41,24 +43,29 @@ Title
   Welcome
 ```
 
-This would result in a PDF with the following slides, where each line contains the visible layers on 
-one page.
+This would result in a PDF with the following slides, where each line contains 
+the visible layers on one page.
 
 ```
 Title,Welcome
-Polar beares,Why polar bears are cool,Argument 1
-Polar beares,Why polar bears are cool,Argument 1,Argument 2
-Polar beares,Why polar bears are cool,Argument 1,Argument 2,Argument 3
-Polar beares,Weaknesses of polar bears
+Polar bears,Weaknesses of polar bears
+Polar bears,Why polar bears are cool,Argument 1
+Polar bears,Why polar bears are cool,Argument 1,Argument 2
+Polar bears,Why polar bears are cool,Argument 1,Argument 2,Argument 3
 ```
 
-As you can see, the polar bear slide builds up its argument as frames, much like it is known from usual 
-PowerPoint presentations. If there are no sublayers of sublayers, we end up with a simple slide without
-any frames.
+As you can see, the layers in the third level of the layer tree are treated as 
+frames, where the previous slides stay visible. If there are no sublayers of 
+sublayers, we end up with a simple slide without any frames.
 
-To reuse common layers you can, at any layer that is not a root layer, import other layers by defining a
-text element whose first line contains `#import#`. The following lines should contain the name of the layers
-to be imported. For example
+### Text directives
+
+#### import layers 
+
+To reuse common layers you can, in any layer (except `root`), import 
+other layers by defining a text element whose first line starts with `#import#`. 
+The subsequent lines should contain the name of layers to be imported. For 
+example:
 
 ```
 #import#
@@ -66,38 +73,44 @@ Argument 3
 Weaknesses of polar bears
 ```
 
-would import the two named layers into the current one. Note: If any of the layers to be imported has a `-` (minus)
-sign prefixed, it will not be imported but rather _deleted_ from the current layer list. This is particularly useful
-for the master layer function explained hereafter.
+would make the two layers `Argument 3` and `Weaknesses of polar bears` visible,
+regardless of where in the presentation we are right now. 
 
-Lastly, inkslides searches for a text element starting with `#master#`. The syntax is similar to the `#import#` structure. 
-All layers you list in the master block are visible on every single slide of your presentation. You may disable them by an
-`#import#` directive with one of the master layers prefixed with a `-`. Note, that the master block can appear _anywhere_ in 
-your SVG file. 
+If any of the layers in an `#import#` block is prefixed with a `-` (minus) sign, 
+it won't be imported but rather _deleted_ from the current layer list. This is 
+particularly useful for the `#master'` block (see below).
 
-If multiple `#master#` blocks are found globally, or multiple `#import#` blocks are present in one layer, the first one is 
-chosen and the others are ignored. 
+#### master layers
 
-## script usage
+`inkslides` searches for a text element starting with `#master#`. The syntax is 
+similar to the `#import#` structure. All layers you list in the master block are 
+visible on every single slide of your presentation. You may disable them by an 
+`#import#` directive with one of the master layers prefixed with a `-`. Note, 
+that the master block can appear _anywhere_ in your SVG file. 
+
+If multiple `#master#` blocks are found globally, or multiple `#import#` blocks 
+are present in one layer, the first one is chosen and the others are ignored. 
+
+### compile the presentation
+
 ```
-> chmod +x inkslides.py
-> ./inkslides.py example.svg
+> inkslides example.svg
 ```
 
 If you pass the parameter `-t, --temp`, then no temporary files are
-kept by inkscapeslide. This, however, slows down the compilation,
-because it recompiles all the slides!
+kept by `inkslides`. This slows down the compilation but may help during 
+development or debugging.
 
-In addition, you can give the `-w, --watch` parameter. If that one is 
-present, the script keeps running and watches the input SVG file for 
-changes. If one is detected, the presentation is automatically recompiled.
+In addition, you can give the `-w, --watch` parameter. If it is 
+present, the program keeps running and watches the input SVG file for 
+changes. If changes are detected, the presentation is automatically recompiled.
 
-Try not to embed images but link them, otherwise the file will be huge.
+Try not to embed images but link them to reduce file sizes.
 
 To compress the output PDF files, you may use ghostcript. For example:
 
 ```
-> gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dDownsampleColorImages=true -dColorImageResolution=150 -dCompatibilityLevel=1.4 -sOutputFile=$output$.pdf $input$.pdf
+> gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dDownsampleColorImages=true -dColorImageResolution=150 -dCompatibilityLevel=1.4 -sOutputFile=$output $input
 
 ```
 
@@ -107,5 +120,6 @@ The idea and many concepts of this script are taken from
 [inkscapeslide](https://github.com/abourget/inkscapeslide).
 
 ## Modified
-Johannes Graeter: added slide enumeration
-Johannes Graeter: added structuring by layers
+
+  * Johannes Graeter: added slide enumeration
+  * Johannes Graeter: added structuring by layers
