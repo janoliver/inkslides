@@ -22,9 +22,9 @@ from multiprocessing import Queue
 
 from lxml.etree import XMLParser, parse
 
-from inkslides.inkscape import InkscapeWorker
-from inkslides.merge import MergerWrapper
-from inkslides.utils import *
+from inkscape import InkscapeWorker
+from merge import MergerWrapper
+from utils import *
 
 __author__ = "Jan Oliver Oelerich"
 __copyright__ = "Copyright 2013, Universitaet Marburg"
@@ -364,11 +364,11 @@ class InkSlides(object):
                     for sublayer in sublayers:
                         current_slide.append(get_label(sublayer))
                         self.add_imported_layers(sublayer, current_slide)
-                        slide_tree.append((num_slide, current_slide.copy()))
+                        slide_tree.append((num_slide, current_slide[:]))
 
                 else:
                     # no sublayers present, we therefore add the current layer
-                    slide_tree.append((num_slide, current_slide.copy()))
+                    slide_tree.append((num_slide, current_slide[:]))
 
         return slide_tree
 
