@@ -22,9 +22,9 @@ from multiprocessing import Queue
 
 from lxml.etree import XMLParser, parse
 
-from inkscape import InkscapeWorker
-from merge import MergerWrapper
-from utils import *
+from .inkscape import InkscapeWorker
+from .merge import MergerWrapper
+from .utils import *
 
 __author__ = "Jan Oliver Oelerich"
 __copyright__ = "Copyright 2013, Universitaet Marburg"
