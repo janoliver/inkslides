@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='inkslides',
-    version='2.0.0.a1',
+    version='2.1.0',
 
     setup_requires=['lxml'],
 
