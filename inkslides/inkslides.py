@@ -192,24 +192,28 @@ class InkSlides(object):
             tmp_layers = get_all_layers(tmp_doc)
 
             # set the slide layers to visible and apply opacity 1.0
+            do_delete = True
             for layer in slide:
                 show_layer(tmp_layers[layer])
+                if tmp_layers[layer].xpath('.//svg:use', namespaces=nsmap):
+                    do_delete = False
 
-            # add the hidden elements to the to-delete list
-            to_be_deleted = tmp_doc.xpath(
-                '/*/svg:g[@inkscape:groupmode="layer"][contains(\
-                @style, "display:none")]',
-                namespaces=nsmap
-            )
+            if do_delete:
+                # add the hidden elements to the to-delete list
+                to_be_deleted = tmp_doc.xpath(
+                    '/*/svg:g[@inkscape:groupmode="layer"][contains(\
+                    @style, "display:none")]',
+                    namespaces=nsmap
+                )
 
-            # add the sodipodi:namedview element, which is just inkscape
-            # related stuff
-            to_be_deleted.append(
-                tmp_doc.xpath('//sodipodi:namedview', namespaces=nsmap)[0])
+                # add the sodipodi:namedview element, which is just inkscape
+                # related stuff
+                to_be_deleted.append(
+                    tmp_doc.xpath('//sodipodi:namedview', namespaces=nsmap)[0])
 
-            # delete them
-            for layer in to_be_deleted:
-                layer.getparent().remove(layer)
+                # delete them
+                for layer in to_be_deleted:
+                    layer.getparent().remove(layer)
 
             # calculate the sha256 hash of the current svg file, write svg
             # to file
@@ -389,7 +393,7 @@ class InkSlides(object):
             self.add_imported_layers(slide, current_slide)
             slide_tree.append((num_slide, current_slide[:]))
 
-    return slide_tree
+        return slide_tree
 
     def pdf_from_svg(self, svg_file_name):
         return ".".join(svg_file_name.split('.')[:-1]) + '.pdf'
