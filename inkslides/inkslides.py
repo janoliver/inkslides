@@ -48,7 +48,7 @@ class InkSlides(object):
     Depending on the number of slides, this may take a while.
     """
 
-    def __init__(self, num_workers):
+    def __init__(self, num_workers, flat=False):
 
         # Input and output filenames
         self.f_input = None
@@ -66,6 +66,8 @@ class InkSlides(object):
         self.tmp_folder = None
 
         self.num_workers = num_workers
+
+        self.flat = flat
 
     def runwatch(self, file, temp=True):
 
@@ -166,7 +168,7 @@ class InkSlides(object):
 
         # find the content descriptor, i.e., which slides to include when + how
         # self.content = self.get_content_description()
-        self.content = self.get_layer_structure()
+        self.content = self.get_layer_structure() if not self.flat else self.get_flat_layer_structure()
 
         # set all elements in the pdf to hidden
         hide_all_layers(self.doc)
@@ -372,6 +374,23 @@ class InkSlides(object):
 
         return slide_tree
 
+    def get_flat_layer_structure(self):
+        """
+        Determine the layer structure
+        """
+        slide_tree = []
+        num_slide = 0
+
+        # iterate in reverse because svg is formated in this way
+        for slide in self.doc.getroot().xpath('./svg:g[@inkscape:groupmode="layer"]', namespaces=nsmap):
+            num_slide += 1
+            current_slide = [get_label(slide)]
+            self.add_master_layers(current_slide)
+            self.add_imported_layers(slide, current_slide)
+            slide_tree.append((num_slide, current_slide[:]))
+
+    return slide_tree
+
     def pdf_from_svg(self, svg_file_name):
         return ".".join(svg_file_name.split('.')[:-1]) + '.pdf'
 
@@ -385,12 +404,14 @@ def main():
                         help='don\'t keep the temporary files to speed up compilation')
     parser.add_argument('-w', '--watch', action='store_true',
                         help='watch the input file for changes and automatically recompile')
+    parser.add_argument('--flat', action='store_true',
+                        help='Ignore sublayers and simply let each top level layer be one slide.')
     parser.add_argument('-p', '--parallel-workers', type=int, default=multiprocessing.cpu_count(),
                         help='The number of inkscape workers to spawn.')
     parser.add_argument('file', metavar='svg-file', type=str, help='The svg file to process')
     args = parser.parse_args()
 
-    i = InkSlides(args.parallel_workers)
+    i = InkSlides(args.parallel_workers, flat=args.flat)
 
     if args.watch:
         i.runwatch(file=args.file, temp=args.temp)
